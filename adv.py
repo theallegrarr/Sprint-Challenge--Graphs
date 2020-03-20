@@ -1,6 +1,8 @@
 from room import Room
 from player import Player
 from world import World
+from collections import defaultdict
+from util import Stack, Queue
 
 import random
 from ast import literal_eval
@@ -28,84 +30,105 @@ player = Player(world.starting_room)
 # Fill this out with directions to walk
 # traversal_path = ['n', 'n']
 traversal_path = []
+opposite_direction = { 'n': 's', 's': 'n','e': 'w','w': 'e'}
 
-def projected_path(starting_room, already_visited=set()):
-    # create new empty set for visited rooms
-    visited = set()
-    # loop over all visited rooms and add them to already visted
-    for room in already_visited:
-        visited.add(room)
+graph = {}
 
-    # create an empty list to hold paths and a tuple of opposite directions
-    path = []
-    opposite = {'n': 's', 'e': 'w', 's': 'n', 'w': 'e'}
+# finding the last room with BFS
+def breadth_first_search(graph, starting_room):
+    queue = Queue()
+    visited_set = set()
+    queue.enqueue([starting_room])
 
-    # create method that adds a room and all possible exits to the path 
-    def add_to_path(room, back=None):
-        visited.add(room)
-        exits = room.get_exits()
+    while queue.size():
+        path = queue.dequeue()
+        next_room = path[-1]
 
-        # this loop will repeatedly call its parent method when it moves to a new room
-        # that has not been visited
-        for direction in exits:
-            if room.get_room_in_direction(direction) not in visited:
-                path.append(direction)
-                add_to_path(room.get_room_in_direction(direction), opposite[direction])
+        # if next room has not been visited
+        if next_room not in visited_set:
+            visited_set.add(next_room)
 
-        if back:
-            path.append(back)
+            # check all exits in the next room
+            for room in graph[next_room]:
+                # check if an exit has been visited
+                if graph[next_room][room] == 'visited':
+                    return path
+            
+            for any_exit in graph[next_room]:
+                # set the exit to be tracked to a variable
+                neighboring_room = graph[next_room][any_exit]
+                
+                # copy the path
+                new_path = list(path)
+                new_path.append(neighboring_room)
+
+                # save the path
+                queue.enqueue(new_path)
+
+
+while len(graph) < len(room_graph):
+    current_room_id = player.current_room.id
     
-    add_to_path(starting_room)
+    # if current room is not yet in the graph
+    if current_room_id not in graph:
+        # insert the room as an empty dict
+        graph[current_room_id] = {}
+
+        # loop over the exits
+        for room_exits in player.current_room.get_exits():
+            # check if they have been visited
+            graph[current_room_id][room_exits] = "visited"
+
     
-    return path
+    # loop over any direction a room can go
+    for direction in graph[current_room_id]:
+        # check if player can not move beyond room
+        if direction not in graph[current_room_id]:
+            break
 
-# create path traversal method
-def create_path(starting_room, visited=set()):
-    path = []
-    opposite = {'n': 's', 'e': 'w', 's': 'n', 'w': 'e'}
+        # check if all exits have been visited
+        if graph[current_room_id][direction] == 'visited':
+            
+            # if there is an exit in the dictionary
+            if direction is not None:
+                traversal_path.append(direction)
+                player.travel(direction)
+                
+                # create a variable to hold current room id
+                room_id = player.current_room.id
 
-    # create method that adds possible paths
-    def add_to_path(room, back=None):
-        visited.add(room)
-        exits = room.get_exits()
-        path_lengths = {}
+                # if the room_id has not been visited
+                if room_id not in graph:
+                    graph[room_id] = {}
 
-        # create item in path lengths for each projected path in every exit
-        for direction in exits:
-            path_lengths[direction] = len(projected_path(room.get_room_in_direction(direction), visited))
-        
-        
-        traverse_order = []
-        # for every key and value in path lengths, sort and turn into lists
-        for key, x in sorted(path_lengths.items(), key=lambda x: x[1]):
-            # append every traverse order
-            traverse_order.append(key)
+                    # for each available exit in the room, set exits to visited
+                    for any_exit in player.current_room.get_exits():
+                        graph[room_id][any_exit] = 'visited'
 
-        for direction in traverse_order:
-            # if the next room has not been visited
-            if room.get_room_in_direction(direction) not in visited:
-                # in every room add to path
-                path.append(direction)
-                # continue in the next room
-                add_to_path(room.get_room_in_direction(direction), opposite[direction])
+            # set previous room directions and exits
+            graph[current_room_id][direction] = room_id
+            graph[room_id][opposite_direction[direction]] = current_room_id
+            current_room_id = room_id
 
-        # print(len(visited))
-        # check if all rooms have been visited
-        if len(visited) == len(world.rooms):
-            return
-        # if not visited and back is defined then append back
-        elif back:
-            path.append(back)
+    # using BFS, with parameters for graph and current room
+    bfs_path = breadth_first_search(graph, player.current_room.id)
+    
+    # create directions using all rooms in the path and appending all directions
+    if bfs_path is not None:
+        for room in bfs_path:
+            for any_exit in graph[current_room_id]:
+                if graph[current_room_id][any_exit] == room:
+                    traversal_path.append(any_exit)
+                    # move in that direction
+                    player.travel(any_exit)
 
-    add_to_path(starting_room)
-    print(path)
-    return path
+    current_room_id = player.current_room.id
 
-traversal_path = create_path(world.starting_room)
 
 # TRAVERSAL TEST
 visited_rooms = set()
 player.current_room = world.starting_room
+
 visited_rooms.add(player.current_room)
 
 for move in traversal_path:
